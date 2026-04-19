@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#F4E3B2">
+  <title>山海经——人生旅行相册</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* 内联关键CSS，确保首屏渲染*/
+    #splash-screen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #E5D9C5 0%, #D4C4A8 50%, #A68B5B 100%);
+      overflow: hidden;
+    }
+    #splash-screen .splash-bg-pattern {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      opacity: 0.05;
+      background-image: 
+        radial-gradient(circle at 20% 50%, #FFD700 1px, transparent 1px),
+        radial-gradient(circle at 80% 20%, #FFD700 1px, transparent 1px),
+        radial-gradient(circle at 40% 80%, #FFD700 1px, transparent 1px);
+      background-size: 100px 100px, 150px 150px, 200px 200px;
+      animation: float 20s ease-in-out infinite;
+    }
+    .splash-loading {
+      color: #4A4A4A;
+      font-size: 14px;
+      margin-top: 30px;
+      letter-spacing: 4px;
+    }
+    .splash-loading::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-20px); }
+    }
+  </style>
+</head>
+<body>
+  <!-- 游戏主容器-->
+  <div id="app" class="visible">
+    <!-- 加载占位屏幕 -->
+    <div id="splash-screen">
+      <div class="splash-bg-pattern"></div>
+      <div class="splash-loading">天地初开</div>
+    </div>
+
+    <!-- 顶部状态栏 -->
+    <header id="status-bar">
+      <div class="status-left">
+        <span id="player-level-badge" class="level-badge">Lv.1</span>
+        <span id="player-title" class="player-title">巡界司·初阶</span>
+      </div>
+      <div class="status-center">
+        <span id="status-title">山海志</span>
+      </div>
+      <div class="status-right">
+        <button id="btn-sound" class="icon-btn" title="音效"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></button>
+        <button id="btn-settings" class="icon-btn" title="设置"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      </div>
+    </header>
+
+    <!-- 页面内容器-->
+    <main id="page-container">
+      <!-- 各页面由JS动态渲染-->
+    </main>
+
+    <!-- 悬浮导航按钮 (Floating Action Button) -->
+    <div id="floating-nav-container">
+      <div id="floating-nav-menu" class="hidden">
+        <div class="nav-item active" data-page="map">
+          <div class="nav-label">地图卷轴</div>
+        </div>
+        <div class="nav-item" data-page="collection">
+          <div class="nav-label">山海图鉴</div>
+        </div>
+        <div class="nav-item" data-page="profile">
+          <div class="nav-label">我的行囊</div>
+        </div>
+      </div>
+      <button id="floating-nav-fab" aria-label="Toggle Navigation">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+      </button>
+    </div>
+
+    <!-- 模态框容器 -->
+    <div id="modal-container"></div>
+    <!-- Toast容器 -->
+    <div id="toast-container"></div>
+    <!-- 引导遮罩容器 -->
+    <div id="tutorial-container"></div>
+    <!-- 奖励动画容器 -->
+    <div id="reward-container"></div>
+  </div>
+
+  <!-- 脚本加载 -->
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    // ==================== 游戏启动入口 ====================
+    (function() {
+      'use strict';
+
+      /**
+       * 应用启动函数
+       * 等待所有模块加载完成后初始化游戏
+       */
+      function boot() {
+        console.log('[App] 启动..');
+        console.log('[App] GameData 版本:', window.GameData ? window.GameData.version : '未加载');
+        console.log('[App] GameEngine:', window.GameEngine ? '已加载' : '未加载');
+        console.log('[App] GameUI:', window.GameUI ? '已加载' : '未加载');
+
+        // 检查依赖
+        if (!window.GameData) {
+          console.error('[App] GameData 模块未加载！');
+          return;
+        }
+        if (!window.GameEngine) {
+          console.error('[App] GameEngine 模块未加载！');
+          return;
+        }
+        if (!window.GameUI) {
+          console.error('[App] GameUI 模块未加载！');
+          return;
+        }
+
+        // 隐藏加载屏幕，显示游戏
+        var splashEl = document.getElementById('splash-screen');
+        var appEl = document.getElementById('app');
+
+        // 先初始化UI（渲染DOM结构），再初始化引擎（Router需要找到页面元素）
+        GameUI.initUI();
+        GameEngine.init();
+
+        // 淡出加载屏幕
+        setTimeout(function() {
+          splashEl.style.transition = 'opacity 0.8s ease';
+          splashEl.style.opacity = '0';
+          setTimeout(function() {
+            splashEl.style.display = 'none';
+            splashEl.remove();
+          }, 800);
+        }, 500);
+
+        console.log('[App] 游戏启动完成');
+      }
+
+      // DOM加载完成后启动
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+      } else {
+        boot();
+      }
+
+      // 全局错误处理
+      window.onerror = function(msg, url, line, col, error) {
+        console.error('[App Error]', msg, 'at', url, ':', line, col, error);
+        // 在页面上显示错误详情（调试用
+        var errEl = document.getElementById('debug-error');
+        if (!errEl) {
+          errEl = document.createElement('div');
+          errEl.id = 'debug-error';
+          errEl.style.cssText = 'position:fixed;bottom:80px;left:10px;right:10px;z-index:99999;' +
+            'padding:10px;background:rgba(198,40,40,0.95);color:#fff;font-size:12px;' +
+            'border-radius:8px;word-break:break-all;font-family:monospace;';
+          document.body.appendChild(errEl);
+        }
+        errEl.textContent = 'Error: ' + msg + ' (line ' + line + ')';
+        // 显示友好的错误提示
+        if (window.GameEngine && window.GameEngine.Notification) {
+          GameEngine.Notification.showToast('出了点小问题，请刷新重试', 'error');
+        }
+        return false;
+      };
+
+    })();
+  </script>
+</body>
+</html>
+

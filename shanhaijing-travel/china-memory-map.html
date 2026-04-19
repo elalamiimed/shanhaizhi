@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>足迹地图 · China Memory Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#F4E3B2;--surface:#Fdfdfc;--surface2:#Eee9e0;
+  --border:rgba(0,0,0,0.1);
+  --text:#2C2C2C;--text-muted:#666666;--text-faint:#999999;
+  --accent:#C41E3A;--accent2:#D32F2F;
+  --prov-fill:#966919;--prov-stroke:#B0A090;
+  --city-fill:#Eae2d5;--city-stroke:#A09080;
+  --dist-fill:#E0d8ca;--dist-stroke:#908070;
+  --t:200ms cubic-bezier(0.16,1,0.3,1);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --safe-top:env(safe-area-inset-top,0px);
+}
+html,body{height:100%;height:100dvh;overflow:hidden;font-family:'Noto Serif SC','KaiTi',serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;touch-action:manipulation}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;padding-top:calc(10px + var(--safe-top));background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{color:var(--accent)}
+.logo h1{font-size:14px;font-weight:600}
+.logo span{font-family:'Noto Sans SC';color:var(--text-muted);font-size:11px;margin-left:4px}
+.stats{display:flex;gap:14px}
+.stat{text-align:center}
+.stat-num{font-size:18px;font-weight:700;line-height:1;color:var(--accent)}
+.stat-label{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-top:1px}
+.breadcrumb{display:flex;align-items:center;gap:6px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;white-space:nowrap;min-height:34px}
+.breadcrumb::-webkit-scrollbar{display:none}
+.bc-item{font-size:11px;color:var(--text-muted);cursor:pointer;padding:3px 8px;border-radius:20px;border:1px solid transparent;transition:all var(--t);user-select:none}
+.bc-item:hover{color:var(--text);border-color:var(--border)}
+.bc-item.active{color:var(--text);background:var(--surface2);border-color:var(--border)}
+.bc-sep{color:var(--text-faint);font-size:10px}
+.map-wrapper{flex:1;position:relative;overflow:hidden;background:var(--bg);display:flex;min-height:0}
+.map-canvas{flex:1;position:relative;overflow:hidden;min-width:0;min-height:0}
+#leaflet-map{position:absolute;inset:0;width:100%;height:100%;background:#F4E3B2}
+.leaflet-container{background:transparent;font-family:'Noto Serif SC','KaiTi',serif}
+.leaflet-tile{filter:grayscale(1) opacity(0.5) sepia(0.3) contrast(1.1)}
+.leaflet-control-attribution{background:rgba(253,253,252,.86)!important;color:var(--text-muted)!important;border:1px solid var(--border);border-radius:8px!important;margin:0 10px 10px 0!important}
+.leaflet-control-attribution a{color:var(--text)!important}
+
+/* Province / City / District paths */
+.province{fill:var(--prov-fill);stroke:var(--prov-stroke);stroke-width:.8;cursor:pointer;transition:fill .25s,filter .25s}
+.province:hover{fill:#252844;filter:brightness(1.3)}
+.province.lit{stroke:rgba(255,255,255,.12)}
+.city-boundary{fill:var(--city-fill);stroke:var(--city-stroke);stroke-width:.5;cursor:pointer;transition:fill .2s}
+.city-boundary:hover{fill:#1c1f38;filter:brightness(1.3)}
+.city-boundary.lit{stroke:rgba(255,255,255,.1)}
+.district-boundary{fill:var(--dist-fill);stroke:var(--dist-stroke);stroke-width:.3;cursor:pointer;transition:fill .2s}
+.district-boundary:hover{fill:#181c30;filter:brightness(1.3)}
+.district-boundary.lit{stroke:rgba(255,255,255,.08)}
+
+/* Labels */
+.map-label{font-family:'Noto Sans SC','Inter',sans-serif;pointer-events:auto;cursor:pointer;text-anchor:middle;dominant-baseline:middle;transition:opacity .2s;paint-order:stroke;stroke:rgba(10,10,16,.9);stroke-width:2px;stroke-linejoin:round}
+.prov-label{fill:#8888aa;font-weight:500}
+.city-label{fill:#8888aa;font-weight:400}
+.district-label{fill:#606090;font-weight:300}
+.national-city-dot{fill:rgba(136,136,170,.68);stroke:rgba(10,10,16,.55);stroke-width:.8;transition:opacity .2s,transform .2s}
+.national-city-dot:hover{fill:var(--accent)}
+.national-city-label{fill:#8888aa;font-weight:400}
+.city-label-marker{color:#c4c4c4;font-size:10px;font-weight:600;letter-spacing:.2px;text-shadow:0 0 10px rgba(0,0,0,.55);white-space:nowrap;transform:translate(-50%,-50%);pointer-events:none}
+.city-label-marker.dim{opacity:.72}
+.city-label-marker.active{color:#f0f0f0}
+.city-core-marker{background:transparent;border:none}
+.city-core-dot{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle,#7e848b 0%,#5f656c 38%,rgba(255,255,255,.05) 39%,rgba(255,255,255,0) 72%);box-shadow:0 0 14px rgba(52,55,60,.52);border:1px solid rgba(255,255,255,.12);transition:transform var(--t),background var(--t),box-shadow var(--t),border-color var(--t)}
+.city-core-ring{position:absolute;left:50%;top:50%;width:34px;height:34px;border-radius:50%;transform:translate(-50%,-50%);border:1px solid rgba(61,65,71,.62);opacity:.38;transition:width var(--t),height var(--t),opacity var(--t),border-color var(--t)}
+.city-core-marker.unlocked .city-core-dot{background:radial-gradient(circle,var(--city-accent) 0%,color-mix(in srgb,var(--city-accent) 72%, #ffffff 28%) 38%,rgba(255,255,255,.06) 39%,rgba(255,255,255,0) 72%);box-shadow:0 0 8px color-mix(in srgb,var(--city-accent) 30%, transparent);border-color:rgba(255,255,255,.18)}
+.city-core-marker.unlocked .city-core-ring{width:12px;height:12px;border-color:color-mix(in srgb,var(--city-accent) 35%, transparent);opacity:.2}
+.city-core-marker.active .city-core-dot{transform:scale(1.18)}
+.city-core-marker.active .city-core-dot{background:radial-gradient(circle,var(--city-accent) 0%,color-mix(in srgb,var(--city-accent) 70%, #ffffff 30%) 38%,rgba(255,255,255,.06) 39%,rgba(255,255,255,0) 72%);box-shadow:0 0 18px color-mix(in srgb,var(--city-accent) 55%, transparent);border-color:rgba(255,255,255,.18)}
+.city-core-marker.active .city-core-ring{width:42px;height:42px;opacity:.72;border-color:color-mix(in srgb,var(--city-accent) 55%, transparent)}
+.city-chip-bar{position:absolute;left:12px;right:68px;top:12px;display:flex;gap:8px;overflow:auto;padding-bottom:4px;z-index:25;scrollbar-width:none}
+.city-chip-bar::-webkit-scrollbar{display:none}
+.city-chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:rgba(52,55,60,.82);border:1px solid var(--border);backdrop-filter:blur(8px);color:var(--text);font-size:11px;white-space:nowrap;cursor:pointer;transition:transform var(--t),border-color var(--t),background var(--t)}
+.city-chip:hover,.city-chip.active{border-color:rgba(255,107,53,.4);background:rgba(255,107,53,.1);transform:translateY(-1px)}
+.city-chip-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.focus-card{display:flex;flex-direction:column;gap:12px}
+.focus-card p{font-size:12px;color:var(--text-muted);line-height:1.6}
+.focus-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.focus-metric{padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)}
+.focus-metric b{display:block;font-size:12px;color:var(--text)}
+.focus-metric span{font-size:10px;color:var(--text-muted)}
+.city-list{display:grid;gap:8px}
+.city-link{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.02);cursor:pointer;transition:border-color var(--t),transform var(--t),background var(--t)}
+.city-link:hover,.city-link.active{border-color:rgba(255,107,53,.35);background:rgba(255,107,53,.06);transform:translateY(-1px)}
+.city-link small{display:block;color:var(--text-muted);font-size:10px}
+.city-link-name{font-size:13px;font-weight:600}
+.city-link-arrow{color:var(--text-faint);font-size:11px}
+.map-note{font-size:10px;color:var(--text-faint);line-height:1.5}
+
+/* UI overlays */
+.zoom-controls{position:absolute;right:12px;bottom:70px;display:flex;flex-direction:column;gap:4px;z-index:20}
+.zoom-btn{width:38px;height:38px;border-radius:9px;background:rgba(52,55,60,.92);border:1px solid var(--border);color:var(--text);font-size:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);transition:background var(--t);user-select:none;line-height:1}
+.zoom-btn:active{background:var(--surface2)}
+.back-btn{position:absolute;left:12px;top:10px;display:none;align-items:center;gap:5px;padding:7px 12px;background:rgba(52,55,60,.92);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--text);cursor:pointer;backdrop-filter:blur(6px);z-index:20;user-select:none}
+.back-btn.visible{display:flex}
+.back-btn:active{opacity:.7}
+.level-badge{position:absolute;left:12px;bottom:70px;background:rgba(52,55,60,.92);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px;color:var(--text-muted);backdrop-filter:blur(6px);pointer-events:none;z-index:10;line-height:1.6}
+.level-badge b{color:var(--text)}
+.progress-bar-wrap{position:absolute;top:0;left:0;right:0;z-index:5;pointer-events:none}
+.progress-track{height:2px;background:transparent}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .5s ease;width:0%}
+
+/* Tooltip */
+.tooltip{position:fixed;background:#1a1a28;border:1px solid rgba(255,255,255,.12);border-radius:7px;padding:5px 10px;font-family:'Noto Sans SC',sans-serif;font-size:12px;pointer-events:none;z-index:200;opacity:0;transition:opacity .15s;white-space:nowrap}
+.tooltip.visible{opacity:1}
+
+/* Loading */
+#loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:var(--bg);z-index:50}
+.spinner{width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tile-loader{position:absolute;top:12px;right:12px;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;z-index:30;opacity:0;pointer-events:none;transition:opacity .2s}
+.tile-loader.active{opacity:1}
+
+/* Bottom sheet */
+.sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;opacity:0;pointer-events:none;transition:opacity .3s}
+.sheet-backdrop.visible{opacity:1;pointer-events:auto}
+.bottom-sheet{position:fixed;bottom:0;left:0;right:0;z-index:50;background:var(--surface);border-radius:22px 22px 0 0;border-top:1px solid var(--border);padding:0 18px;padding-bottom:calc(22px + var(--safe-bottom));max-height:82dvh;overflow-y:auto;transform:translateY(100%);transition:transform .35s cubic-bezier(0.16,1,0.3,1);-webkit-overflow-scrolling:touch}
+.bottom-sheet.open{transform:translateY(0)}
+.sheet-handle{width:36px;height:4px;background:rgba(255,255,255,.12);border-radius:2px;margin:12px auto 16px}
+
+/* Sheet content */
+.sheet-header{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sheet-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.sheet-name-cn{font-size:20px;font-weight:700;font-family:'Noto Sans SC'}
+.sheet-name-en{font-size:11px;color:var(--text-muted);margin-top:2px}
+.sheet-meta{font-size:10px;color:var(--text-faint);margin-top:2px}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:500;margin-bottom:12px;width:fit-content}
+.status-badge.locked{background:rgba(255,255,255,.05);color:var(--text-muted)}
+.status-badge.unlocked{background:rgba(255,107,53,.15);color:var(--accent)}
+.steps-title{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:9px}
+.step{display:flex;align-items:flex-start;gap:10px;padding:11px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);margin-bottom:7px;cursor:pointer;position:relative;overflow:hidden;transition:border-color var(--t),background var(--t);min-height:54px}
+.step:active{background:rgba(255,255,255,.03)}
+.step.completed{border-color:rgba(255,107,53,.3);background:rgba(255,107,53,.05)}
+.step-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);flex-shrink:0;transition:background var(--t)}
+.step.completed .step-icon{background:rgba(255,107,53,.15)}
+.step-icon svg{color:var(--text-muted);transition:color var(--t)}
+.step.completed .step-icon svg{color:var(--accent)}
+.step-body{flex:1;min-width:0}
+.step-label{font-size:13px;font-weight:500;margin-bottom:2px}
+.step-desc{font-size:10px;color:var(--text-muted);line-height:1.4}
+.step-check{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;transition:background var(--t),border-color var(--t)}
+.step.completed .step-check{background:var(--accent);border-color:var(--accent)}
+.step-check svg{color:#fff;opacity:0;transition:opacity var(--t)}
+.step.completed .step-check svg{opacity:1}
+.unlocked-msg{text-align:center;padding:13px;background:rgba(255,107,53,.07);border:1px solid rgba(255,107,53,.18);border-radius:12px;margin-bottom:10px}
+.unlocked-msg .emoji{font-size:22px;margin-bottom:5px}
+.unlocked-msg p{font-size:11px;color:var(--text-muted);line-height:1.5}
+
+/* Particles */
+@keyframes particle{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}
+.particle{position:fixed;width:5px;height:5px;border-radius:50%;pointer-events:none;z-index:999;animation:particle .8s ease-out forwards}
+
+/* Desktop sidebar */
+.desktop-sidebar{width:300px;background:var(--surface);border-left:1px solid var(--border);display:none;flex-direction:column;overflow:hidden;flex-shrink:0}
+.ds-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px}
+.ds-content{flex:1;overflow-y:auto;padding:14px}
+.ds-content::-webkit-scrollbar{width:3px}
+.ds-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.ds-footer{padding:10px 16px;border-top:1px solid var(--border)}
+@media(min-width:600px){
+  .desktop-sidebar{display:flex}
+  .sheet-backdrop,.bottom-sheet{display:none!important}
+  .zoom-controls,.level-badge{bottom:14px}
+}
+</style>
+</head>
+<body>
+<div class="tooltip" id="tooltip"></div>
+
+<div class="map-wrapper">
+  <div class="map-canvas" id="map-canvas">
+    <div class="progress-bar-wrap"><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div></div>
+    <div id="loading">
+      <div class="spinner"></div>
+      <p id="loading-msg" style="font-size:12px;color:var(--text-muted);margin-top:4px">正在加载单一地图与街道底图…</p>
+    </div>
+    <div class="tile-loader" id="tile-loader"></div>
+    <div id="leaflet-map"></div>
+    <button class="back-btn visible" id="back-btn" onclick="resetMapView()">&#8249; 全国</button>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomBy(1)">+</button>
+      <button class="zoom-btn" onclick="zoomBy(-1)">-</button>
+    </div>
+    <div class="level-badge"><b id="level-text">单一地图</b> 模式<br><span style="font-size:9px;color:var(--text-faint)">全国浏览，缩放后查看重点城市街道</span></div>
+  </div>
+</div>
+
+<script>
+const LOCAL_BOUNDARY_BASE='./assets/data/';
+const REMOTE_BOUNDARY_BASE='https://unpkg.com/cn-atlas/';
+const CHINA_BOUNDS=[[17.8,73.2],[53.9,135.3]];
+let CITY_PROVINCE={
+  'beijing':'北京','shanghai':'上海','chengdu':'四川','hangzhou':'浙江',
+  'wuhan':'湖北','kunming':'云南','sanya':'海南','guilin':'广西',
+  'haerbin':'黑龙江','wulumuqi':'新疆','xiamen':'福建','changsha':'湖南'
+};
+
+let TOP_CITIES=[
+  {id:'beijing',name:'北京',en:'Beijing',center:[39.9042,116.4074],bounds:[[39.43,115.7],[40.25,117.4]],accent:'#ff6b35',zoom:11.5,streets:'环路 / 胡同 / CBD',detail:'政治与文化核心，街道层级最适合观察环路、胡同与核心商务区。'},
+  {id:'shanghai',name:'上海',en:'Shanghai',center:[31.2304,121.4737],bounds:[[30.68,121.0],[31.88,122.0]],accent:'#00d4ff',zoom:11.5,streets:'外环 / 陆家嘴 / 苏州河',detail:'高密度道路与滨江空间非常清晰，适合查看主干道和商业区纹理。'},
+  {id:'chengdu',name:'成都',en:'Chengdu',center:[30.5728,104.0668],bounds:[[30.38,103.72],[30.92,104.42]],accent:'#4ade80',zoom:11.1,streets:'环路 / 高新 / 锦江',detail:'放大后能很好地看到环路体系与高新区块的道路组织。'},
+  {id:'hangzhou',name:'杭州',en:'Hangzhou',center:[30.2741,120.1551],bounds:[[29.95,119.88],[30.58,120.48]],accent:'#38bdf8',zoom:11.2,streets:'西湖 / 钱江新城 / 互联网区',detail:'湖区、滨江与核心城区层次分明，平滑缩放体验很好。'},
+  {id:'wuhan',name:'武汉',en:'Wuhan',center:[30.5928,114.3055],bounds:[[30.2,113.88],[31.08,114.72]],accent:'#a78bfa',zoom:11.0,streets:'三镇 / 长江 / 高架',detail:'跨江结构与高架主轴清晰，适合查看大尺度道路连接关系。'},
+  {id:'kunming',name:'昆明',en:'Kunming',center:[25.0389,102.7183],bounds:[[24.78,102.42],[25.32,103.02]],accent:'#86efac',zoom:11.0,streets:'滇池 / 春城路 / 高新',detail:'春城道路网络清晰，滇池沿岸与高新区对比鲜明。'},
+  {id:'sanya',name:'三亚',en:'Sanya',center:[18.2528,109.5119],bounds:[[18.1,109.3],[18.45,109.75]],accent:'#67e8f9',zoom:11.5,streets:'三亚湾 / 亚龙湾 / 海棠湾',detail:'热带海滨城市，海岸线与度假区道路结构清晰。'},
+  {id:'guilin',name:'桂林',en:'Guilin',center:[25.2736,110.2907],bounds:[[25.0,110.0],[25.55,110.6]],accent:'#c084fc',zoom:11.0,streets:'漓江 / 象鼻山 / 七星区',detail:'山水城市，漓江沿岸与老城区道路层次分明。'},
+  {id:'haerbin',name:'哈尔滨',en:'Harbin',center:[45.8038,126.5349],bounds:[[45.55,126.2],[46.1,126.9]],accent:'#93c5fd',zoom:11.0,streets:'中央大街 / 松花江 / 道里区',detail:'冰城道路宽阔，中央大街与松花江沿岸结构清晰。'},
+  {id:'wulumuqi',name:'乌鲁木齐',en:'Urumqi',center:[43.8256,87.6168],bounds:[[43.55,87.3],[44.1,87.95]],accent:'#fcd34d',zoom:11.0,streets:'天山 / 红山 / 高新区',detail:'西部重镇，天山脚下的城市道路网络独具特色。'},
+  {id:'xiamen',name:'厦门',en:'Xiamen',center:[24.4798,118.0894],bounds:[[24.28,117.85],[24.72,118.35]],accent:'#f9a8d4',zoom:11.5,streets:'鼓浪屿 / 中山路 / 环岛路',detail:'海岛城市，鼓浪屿与本岛之间的道路与海岸线清晰可见。'},
+  {id:'changsha',name:'长沙',en:'Changsha',center:[28.2282,112.9388],bounds:[[27.95,112.65],[28.55,113.25]],accent:'#fca5a5',zoom:11.0,streets:'湘江 / 五一广场 / 岳麓山',detail:'湘江两岸城市格局清晰，老城与新区对比鲜明。'}
+];
+
+// 同步主引擎城市数据
+function syncCitiesWithGameData() {
+  if (window.parent && window.parent.GameData && window.parent.GameData.cities && window.parent.GameData.cards) {
+    const parentCities = window.parent.GameData.cities;
+    const validCityIds = new Set(window.parent.GameData.cards.map(c => c.cityId));
+    const updatedCities = [];
+
+    parentCities.forEach(pc => {
+      // 只有在卡组中（有对应神兽卡牌）的城市才保留在地图上
+      if (!validCityIds.has(pc.id)) return;
+
+      // 更新省份映射
+      CITY_PROVINCE[pc.id] = pc.province;
+      
+      // 更新或添加城市节点
+      const existingIdx = TOP_CITIES.findIndex(c => c.id === pc.id);
+      if (existingIdx !== -1) {
+        const city = TOP_CITIES[existingIdx];
+        city.center = [pc.realLat, pc.realLng];
+        city.accent = pc.themeColor || city.accent;
+        city.detail = pc.description || city.detail;
+        updatedCities.push(city);
+      } else {
+        updatedCities.push({
+          id: pc.id,
+          name: pc.name,
+          en: pc.id,
+          center: [pc.realLat, pc.realLng],
+          bounds: [[pc.realLat - 0.2, pc.realLng - 0.3], [pc.realLat + 0.2, pc.realLng + 0.3]],
+          accent: pc.themeColor || '#ff6b35',
+          zoom: 11.0,
+          streets: '主干道 / 街区',
+          detail: pc.description || '探索这座城市的角落，留下你的独家记忆。'
+        });
+      }
+    });
+    
+    // 只保留卡组中的城市作为默认的可见打卡点
+    TOP_CITIES = updatedCities;
+  }
+}
+
+const tooltip=document.getElementById('tooltip');
+const isMobile=()=>window.innerWidth<600;
+const S={map:null,selectedCityId:null,cityMarkers:new Map(),cityLabels:new Map(),focusCircle:null,provinceLayer:null,nationLayer:null,maskLayer:null,tintLayer:null,boundaryData:null};
+const CUSTOM_CITY_ACCENT='#FFD700';
+
+function shortName(n){return(n||'').replace(/省|自治区|特别行政区|壮族|维吾尔族|回族/g,'').trim();}
+function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+
+function readSaveData(){
+  if(window.parent && window.parent.GameEngine && window.parent.GameEngine._state){
+    return window.parent.GameEngine._state;
+  }
+  try{
+    const raw=localStorage.getItem('shanhai_travel_save') || localStorage.getItem('shanhaijing_save');
+    return raw?JSON.parse(raw):{};
+  }catch(e){
+    return {};
+  }
+}
+
+function getMarkerAccent(city,isUnlocked){
+  if(city.id.indexOf('custom_')===0) return CUSTOM_CITY_ACCENT;
+  return isUnlocked ? '#FF0000' : city.accent;
+}
+
+function buildMarkerIcon(city,isUnlocked){
+  const accent=getMarkerAccent(city,isUnlocked);
+  return L.divIcon({
+    className:'city-core-marker'+(isUnlocked?' unlocked':''),
+    html:'<div class="city-core-ring" style="--city-accent:'+accent+'"></div><div class="city-core-dot" style="--city-accent:'+accent+'"></div>',
+    iconSize:[34,34],
+    iconAnchor:[17,17]
+  });
+}
+
+function applyMarkerVisualState(cityId){
+  const marker=S.cityMarkers.get(cityId);
+  const city=getCityById(cityId);
+  if(!marker||!city)return;
+  const state=readSaveData();
+  const cityState=state&&state.cities?state.cities[cityId]:null;
+  const isUnlocked=!!(cityState&&(cityState.unlocked||cityState.completedAt||cityState.memory));
+  marker.setIcon(buildMarkerIcon(city,isUnlocked));
+}
+
+function refreshUnlockedVisuals(){
+  const visibleCities=getVisibleCities();
+  visibleCities.forEach(city=>applyMarkerVisualState(city.id));
+  renderChipBar();
+  applyProvinceColors();
+  syncMarkerState();
+}
+
+function getUnlockedProvinces(){
+  const state=readSaveData();
+  const unlockedCities=state&&state.cities?state.cities:{};
+  const provinces=new Set();
+  for(const cityId in unlockedCities){
+    const cityState=unlockedCities[cityId];
+    if(cityState&&(cityState.unlocked||cityState.memory)){
+      const prov=CITY_PROVINCE[cityId];
+      if(prov)provinces.add(prov);
+    }
+  }
+  return provinces;
+}
+
+function applyProvinceColors(){
+  if(!S.provinceLayer)return;
+  const zoom=S.map?S.map.getZoom():4;
+  const unlocked=getUnlockedProvinces();
+  S.provinceLayer.eachLayer(function(layer){
+    const props=layer.feature&&layer.feature.properties;
+    const name=shortName(props&&(props.name||props.NAME||props.NL_NAME_1||props.省||''));
+    const isUnlocked=unlocked.has(name) || unlocked.has(props&&(props.name||props.NAME||props.NL_NAME_1||props.省||''));
+    layer.setStyle({
+      fillColor: isUnlocked?'#D86A58':'#D4C4A8',
+      fillOpacity: isUnlocked?0.65:(zoom>6?0.3:0.85),
+      color: isUnlocked?'rgba(180,50,50,0.6)':'rgba(140,110,80,0.6)',
+      weight: zoom>8?1.5:1.15
+    });
+  });
+}
+
+function buildCustomCity(id,data){
+  const lat=typeof data.lat==='number'?data.lat:35.8617;
+  const lng=typeof data.lng==='number'?data.lng:104.1954;
+  return {
+    id:id,
+    name:data.name||'自定义地点',
+    en:'Saved Spot',
+    center:[lat,lng],
+    bounds:[[lat-0.28,lng-0.35],[lat+0.28,lng+0.35]],
+    accent:CUSTOM_CITY_ACCENT,
+    zoom:11.8,
+    streets:'自定义足迹 / 旅行记忆',
+    detail:data.memory||'这里保存着你亲手留下的一段旅行记忆。'
+  };
+}
+
+function getCustomSavedCities(){
+  const state=readSaveData();
+  const cities=state&&state.cities?state.cities:{};
+  return Object.keys(cities).filter(id=>id.indexOf('custom_')===0).map(id=>buildCustomCity(id,cities[id]));
+}
+
+function getVisibleCities(){
+  return TOP_CITIES.concat(getCustomSavedCities());
+}
+
+function refreshParentUI(){
+  if(window.parent&&window.parent.GameUI&&typeof window.parent.GameUI.updateUI==='function'){
+    window.parent.GameUI.updateUI();
+  }
+}
+
+function ensureParentCustomPlace(id,name,latlng){
+  if(!(window.parent&&window.parent.GameEngine&&window.parent.GameData)) return;
+
+  const state=window.parent.GameEngine._state;
+  if(!state.cities) state.cities={};
+  if(!state.cities[id]){
+    state.cities[id]={
+      unlocked:true,
+      memory:'',
+      name:name,
+      lat:latlng.lat,
+      lng:latlng.lng,
+      isCustom:true
+    };
+  }
+
+  const beasts=window.parent.GameData.beasts||[];
+  if(!beasts.length) return;
+
+  let beastIndex=0;
+  for(let i=0;i<id.length;i++) beastIndex+=id.charCodeAt(i);
+  beastIndex=beastIndex%beasts.length;
+  const randomBeast=beasts[beastIndex];
+
+  if(!window.parent.GameData.cities.find(city=>city.id===id)){
+    window.parent.GameData.cities.push({
+      id:id,
+      name:name,
+      province:'未知',
+      region:'zhongshan',
+      lat:50,
+      lng:50,
+      realLat:latlng.lat,
+      realLng:latlng.lng,
+      themeColor:CUSTOM_CITY_ACCENT,
+      landmark:'自定义地点',
+      accent:CUSTOM_CITY_ACCENT,
+      zoom:11.8,
+      streets:'自定义足迹 / 旅行记忆',
+      detail:'这里保存着你亲手留下的一段旅行记忆。',
+      beast:randomBeast.id
+    });
+  }
+
+  if(!window.parent.GameData.cards.find(card=>card.cityId===id)){
+    window.parent.GameData.cards.push({
+      id:'card_'+id,
+      cityId:id,
+      beastId:randomBeast.id,
+      name:name+'的'+randomBeast.name,
+      quote:'旅途中的奇遇。',
+      rarity:randomBeast.rarity,
+      frameStyle:'wood',
+      image:''
+    });
+  }
+}
+
+async function fetchJsonWithFallback(path){
+  const sources=[LOCAL_BOUNDARY_BASE+path,REMOTE_BOUNDARY_BASE+path];
+  let lastError=null;
+  for(const url of sources){
+    try{
+      const res=await fetch(url,{cache:'force-cache'});
+      if(!res.ok)throw new Error('HTTP '+res.status+' @ '+url);
+      return await res.json();
+    }catch(err){
+      lastError=err;
+    }
+  }
+  throw lastError||new Error('Failed to load '+path);
+}
+
+function getMaskGeometry(nationGeo){
+  const worldRing=[[-180,-90],[180,-90],[180,90],[-180,90],[-180,-90]];
+  const features=nationGeo?.features||[];
+  const nation=features[0];
+  if(!nation?.geometry)return null;
+  const geom=nation.geometry;
+  const holes=[];
+
+  if(geom.type==='Polygon'){
+    if(geom.coordinates?.[0]?.length)holes.push(geom.coordinates[0]);
+  }else if(geom.type==='MultiPolygon'){
+    geom.coordinates.forEach(poly=>{
+      if(poly?.[0]?.length)holes.push(poly[0]);
+    });
+  }
+
+  if(!holes.length)return null;
+  return {
+    type:'Feature',
+    properties:{},
+    geometry:{
+      type:'Polygon',
+      coordinates:[worldRing,...holes]
+    }
+  };
+}
+
+function ensureCanvasSize(){
+  const canvas=document.getElementById('map-canvas');
+  const safe=Math.max(0,Math.floor(window.innerHeight));
+  if(safe>0)canvas.style.height=safe+'px';
+}
+
+function setLoading(show,msg){
+  const el=document.getElementById('loading');
+  if(show){
+    el.style.display='flex';
+    el.style.opacity='1';
+    if(msg)document.getElementById('loading-msg').innerHTML=msg;
+  }else{
+    el.style.opacity='0';
+    el.style.transition='opacity .35s';
+    setTimeout(()=>el.style.display='none',360);
+  }
+}
+
+function setLoadingError(msg){
+  document.getElementById('loading').style.display='flex';
+  document.getElementById('loading').innerHTML=
+    '<p style="color:#fb7185;font-size:12px;padding:20px;text-align:center;line-height:1.8;max-width:320px">'+msg+'</p>';
+}
+
+function showTip(e,t){
+  if(!t||isMobile())return;
+  tooltip.textContent=t;
+  tooltip.classList.add('visible');
+  moveTip(e);
+}
+function moveTip(e){
+  tooltip.style.left=(e.clientX+12)+'px';
+  tooltip.style.top=(e.clientY-28)+'px';
+}
+function hideTip(){tooltip.classList.remove('visible');}
+
+function updateHeaderStats(){
+  const levelText=document.getElementById('level-text');
+  if(levelText)levelText.textContent='单一地图';
+  const progressFill=document.getElementById('progress-fill');
+  if(progressFill)progressFill.style.width='100%';
+}
+
+function updateBreadcrumb(city){
+  const bc=document.getElementById('breadcrumb');
+  if(!bc)return;
+  let html='<span class="bc-item active" onclick="resetMapView()">&#127464;&#127475; 中国单图</span>';
+  html+='<span class="bc-sep">&#8250;</span><span class="bc-item '+(!city?'active':'')+'" onclick="resetMapView()">Top 10 Cities</span>';
+  if(city){
+    html+='<span class="bc-sep">&#8250;</span><span class="bc-item active">'+city.name+'</span>';
+  }
+  bc.innerHTML=html;
+}
+
+function cityListHTML(selectedId){
+  return '<div class="city-list">'+getVisibleCities().map(city=>`
+    <div class="city-link ${selectedId===city.id?'active':''}" onclick="flyToCity('${city.id}')">
+      <div>
+        <span class="city-link-name">${city.name}</span>
+        <small>${city.en} · ${city.streets}</small>
+      </div>
+      <span class="city-link-arrow">&#8250;</span>
+    </div>
+  `).join('')+'</div>';
+}
+
+function cityPanelHTML(city){
+  if(!city){
+    return `<div class="focus-card">
+      <div class="sheet-header">
+        <div class="sheet-dot" style="background:var(--accent);box-shadow:0 0 8px rgba(255,107,53,.45)"></div>
+        <div>
+          <div class="sheet-name-cn">单一地图模式</div>
+          <div class="sheet-name-en">One Smooth China Map</div>
+          <div class="sheet-meta">全国一张地图，街道级缩放聚焦 10 座重点城市</div>
+        </div>
+      </div>
+      <p>使用鼠标滚轮或双指缩放，地图会保持连续平滑；点击下方城市或地图光点，会直接飞到该城市的街道级视角。</p>
+      <div class="focus-grid">
+        <div class="focus-metric"><b>${TOP_CITIES.length}</b><span>重点城市</span></div>
+        <div class="focus-metric"><b>18</b><span>最大缩放级别</span></div>
+      </div>
+      ${cityListHTML(null)}
+      <div class="map-note">底图采用连续街道瓦片，边界覆盖采用轻量中国行政边界数据。</div>
+    </div>`;
+  }
+  return `<div class="focus-card">
+    <div class="sheet-header">
+      <div class="sheet-dot" style="background:${city.accent};box-shadow:0 0 10px ${city.accent}66"></div>
+      <div>
+        <div class="sheet-name-cn">${city.name}</div>
+        <div class="sheet-name-en">${city.en}</div>
+        <div class="sheet-meta">重点城市 · 连续街道级缩放</div>
+      </div>
+    </div>
+    <p>${city.detail}</p>
+    <div class="focus-grid">
+      <div class="focus-metric"><b>${city.streets}</b><span>优先街道内容</span></div>
+      <div class="focus-metric"><b>${city.zoom.toFixed(1)}</b><span>建议浏览缩放</span></div>
+    </div>
+    ${cityListHTML(city.id)}
+    <div class="map-note">提示：继续放大可查看更细的道路网与街区结构，点击“全国”可快速回到整张中国地图。</div>
+  </div>`;
+}
+
+function renderDesktop(city){
+  const panel=document.getElementById('ds-panel');
+  const idle=document.getElementById('ds-idle');
+  if(!panel||!idle)return;
+  idle.style.display='none';
+  panel.style.display='block';
+  panel.innerHTML=cityPanelHTML(city);
+}
+
+function openSheet(city){
+  const inner=document.getElementById('sheet-inner');
+  const sheet=document.getElementById('bottom-sheet');
+  const backdrop=document.getElementById('sheet-backdrop');
+  if(!inner||!sheet||!backdrop)return;
+  inner.innerHTML=cityPanelHTML(city);
+  sheet.classList.add('open');
+  backdrop.classList.add('visible');
+}
+
+function closeSheet(){
+  const sheet=document.getElementById('bottom-sheet');
+  const backdrop=document.getElementById('sheet-backdrop');
+  if(sheet)sheet.classList.remove('open');
+  if(backdrop)backdrop.classList.remove('visible');
+}
+
+function renderChipBar(){
+  const bar=document.getElementById('city-chip-bar');
+  if(!bar)return;
+
+  const state=readSaveData();
+  const unlockedCities=state&&state.cities?state.cities:{};
+
+  bar.innerHTML=getVisibleCities().map(city=>{
+    const cityState = unlockedCities[city.id];
+    const isUnlocked = !!(cityState && (cityState.unlocked || cityState.completedAt || cityState.memory));
+    const displayAccent = getMarkerAccent(city,isUnlocked);
+    return `
+    <button class="city-chip ${S.selectedCityId===city.id?'active':''}" onclick="flyToCity('${city.id}')">
+      <span class="city-chip-dot" style="background:${displayAccent}"></span>
+      <span>${city.name}</span>
+    </button>
+  `}).join('');
+}
+
+function getCityById(id){
+  return getVisibleCities().find(city=>city.id===id)||null;
+}
+
+function syncMarkerState(){
+  const zoom=S.map?S.map.getZoom():4;
+  S.cityMarkers.forEach((marker,id)=>{
+    const el=marker.getElement();
+    if(el)el.classList.toggle('active',id===S.selectedCityId);
+  });
+  S.cityLabels.forEach((label,id)=>{
+    const el=label.getElement();
+    if(!el)return;
+    const visible=zoom>=6.4||id===S.selectedCityId;
+    const scale=clamp(0.82+(zoom-4)*0.06,0.82,1.06);
+    el.classList.toggle('active',id===S.selectedCityId);
+    el.style.opacity=visible?'1':'0';
+    el.style.transform='translate(-50%,-50%) scale('+scale+')';
+  });
+  applyProvinceColors();
+  if(S.nationLayer){
+    S.nationLayer.setStyle({
+      color:'rgba(24,26,30,'+(zoom>7?0.92:0.84)+')',
+      weight:zoom>8?1.8:1.45,
+      fillOpacity:0
+    });
+  }
+}
+
+function setSelectedCity(city,openPanel=true){
+  S.selectedCityId=city?city.id:null;
+  renderChipBar();
+  renderDesktop(city||null);
+  updateBreadcrumb(city||null);
+  syncMarkerState();
+  if(isMobile()){
+    if(city)openSheet(city);
+    else closeSheet();
+  }
+}
+
+function createCityLayers(){
+  // 获取本地存档中的已解锁城市
+  let unlockedCities = {};
+  const state = readSaveData();
+  unlockedCities = state.cities || {};
+
+  TOP_CITIES.forEach(city=>{
+    // 如果城市已解锁，将颜色设置为 #FF0000
+    const cityState = unlockedCities[city.id];
+    const isUnlocked = !!(cityState && (cityState.unlocked || cityState.completedAt || cityState.memory));
+
+    const marker=L.marker(city.center,{
+      icon:buildMarkerIcon(city,isUnlocked),
+      keyboard:false
+    }).addTo(S.map);
+    marker.on('click',(e)=>{
+      L.DomEvent.stopPropagation(e);
+      flyToCity(city.id);
+      setTimeout(() => {
+        if(window.parent && window.parent.GameEngine && window.parent.GameEngine.Notification) {
+          const content = `
+            <div style="text-align:left;">
+              <div style="font-size:12px;color:#999;margin-bottom:8px;">写下你的记忆：</div>
+              <textarea id="memory-input-${city.id}" style="width:100%;min-height:80px;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid rgba(0,0,0,0.16);background:rgba(0,0,0,0.06);color:#333;outline:none;resize:vertical;"></textarea>
+            </div>
+          `;
+          window.parent.GameEngine.Notification.showModal(`打卡 ${city.name}`, content, [
+            { text: '取消' },
+            {
+              text: '保存',
+              onClick: function () {
+                const input = window.parent.document.getElementById(`memory-input-${city.id}`);
+                const memory = input ? input.value.trim() : '';
+                if(!memory) return false;
+                const success = window.parent.GameEngine.CheckInSystem.submitCheckIn(city.id, memory);
+                if(!success) return false;
+                refreshUnlockedVisuals();
+                return true;
+              }
+            }
+          ]);
+        } else {
+          const memory = prompt(`在 ${city.name} 写下你的记忆：`);
+          if(memory) {
+            if(window.parent && window.parent.GameEngine) {
+              const success = window.parent.GameEngine.CheckInSystem.submitCheckIn(city.id, memory);
+              if(success){
+                refreshParentUI();
+                refreshUnlockedVisuals();
+              }
+            } else {
+              let state = {};
+              try {
+                const raw = localStorage.getItem('shanhai_travel_save');
+                if(raw) state = JSON.parse(raw);
+              } catch(err) {}
+              if(!state.cities) state.cities = {};
+              if(!state.cities[city.id]) state.cities[city.id] = { unlocked: true };
+              let oldMemory = state.cities[city.id].memory || '';
+              if (oldMemory && oldMemory !== memory && oldMemory.indexOf(memory) === -1) {
+                state.cities[city.id].memory = oldMemory + '\n\n---\n' + memory;
+              } else {
+                state.cities[city.id].memory = memory;
+              }
+              state.cities[city.id].unlocked = true;
+              localStorage.setItem('shanhai_travel_save', JSON.stringify(state));
+              refreshUnlockedVisuals();
+            }
+          }
+        }
+      }, 500);
+    });
+    marker.on('mouseover',e=>showTip(e.originalEvent||e,city.name));
+    marker.on('mouseout',hideTip);
+    S.cityMarkers.set(city.id,marker);
+
+    const label=L.marker(city.center,{
+      interactive:false,
+      icon:L.divIcon({
+        className:'city-label-marker dim',
+        html:'<div>'+city.name+'</div>',
+        iconSize:[80,20],
+        iconAnchor:[40,-2]
+      }),
+      keyboard:false
+    }).addTo(S.map);
+    S.cityLabels.set(city.id,label);
+  });
+
+  S.focusCircle=L.circle([35.8617,104.1954],{
+    radius:0,
+    color:'rgba(255,255,255,0)',
+    fillColor:'rgba(255,255,255,0)',
+    fillOpacity:0
+  }).addTo(S.map);
+  
+  getCustomSavedCities().forEach(city=>{
+    createCustomMarker(city.id, city.center[0], city.center[1], city.name);
+  });
+}
+
+function createCustomMarker(id, lat, lng, name) {
+  if(S.cityMarkers.has(id)) return S.cityMarkers.get(id);
+  const customCity=getCityById(id)||buildCustomCity(id,{name:name,lat:lat,lng:lng});
+  
+  const marker=L.marker([lat, lng],{
+    icon:buildMarkerIcon(customCity,true),
+    keyboard:false
+  }).addTo(S.map);
+  marker.on('click',(e)=>{
+    L.DomEvent.stopPropagation(e);
+    const customCity=getCityById(id)||buildCustomCity(id,{name:name,lat:lat,lng:lng});
+    setSelectedCity(customCity,true);
+    const memory = prompt(`在 ${name} 写下新的记忆：`);
+    if(memory) {
+      if(window.parent && window.parent.GameEngine) {
+        const success = window.parent.GameEngine.CheckInSystem.submitCheckIn(id, memory);
+        if(success){
+          refreshParentUI();
+          refreshUnlockedVisuals();
+        }
+      } else {
+        let state = {};
+          try {
+            const raw = localStorage.getItem('shanhai_travel_save');
+            if(raw) state = JSON.parse(raw);
+          } catch(err) {}
+          if(!state.cities) state.cities = {};
+          state.cities[id] = state.cities[id] || {};
+          let oldMemory = state.cities[id].memory || '';
+          if (oldMemory && oldMemory !== memory && oldMemory.indexOf(memory) === -1) {
+            state.cities[id].memory = oldMemory + '\n\n---\n' + memory;
+          } else {
+            state.cities[id].memory = memory;
+          }
+          localStorage.setItem('shanhai_travel_save', JSON.stringify(state));
+          refreshUnlockedVisuals();
+      }
+    }
+  });
+  marker.on('mouseover',e=>showTip(e.originalEvent||e,name));
+  marker.on('mouseout',hideTip);
+  S.cityMarkers.set(id,marker);
+}
+
+function focusCity(city,animate=true){
+  if(!S.map||!city)return;
+  setSelectedCity(city,true);
+  S.focusCircle.setLatLng(city.center);
+  S.focusCircle.setRadius(32000);
+  S.focusCircle.setStyle({
+    color:city.accent,
+    weight:1.2,
+    opacity:0.45,
+    fillColor:city.accent,
+    fillOpacity:0.06
+  });
+  S.map.flyToBounds(city.bounds,{
+    padding:[46,46],
+    duration:animate?1.15:0,
+    easeLinearity:0.25
+  });
+}
+
+function flyToCity(id){
+  const city=getCityById(id);
+  if(city)focusCity(city,true);
+}
+
+function resetMapView(){
+  if(!S.map)return;
+  setSelectedCity(null,true);
+  S.focusCircle.setStyle({opacity:0,fillOpacity:0});
+  S.map.flyToBounds(CHINA_BOUNDS,{
+    padding:[24,24],
+    duration:1.1,
+    easeLinearity:0.2
+  });
+}
+
+function goBack(){resetMapView();}
+
+function zoomBy(delta){
+  if(!S.map)return;
+  const next=clamp(S.map.getZoom()+delta,4,18);
+  S.map.flyTo(S.map.getCenter(),next,{duration:.35});
+}
+
+async function loadBoundaryData(){
+  if(S.boundaryData)return S.boundaryData;
+  const [nation,provinces]=await Promise.all([
+    fetchJsonWithFallback('nation.json'),
+    fetchJsonWithFallback('provinces.json')
+  ]);
+  S.boundaryData={nation,provinces};
+  return S.boundaryData;
+}
+
+function initBaseMap(){
+  ensureCanvasSize();
+  S.map=L.map('leaflet-map',{
+    zoomControl:false,
+    minZoom:4,
+    maxZoom:18,
+    zoomSnap:0.25,
+    zoomDelta:0.5,
+    wheelPxPerZoomLevel:140,
+    inertia:true,
+    easeLinearity:0.25,
+    zoomAnimation:true,
+    fadeAnimation:true,
+    markerZoomAnimation:true,
+    preferCanvas:true,
+    attributionControl:true,
+    maxBounds:CHINA_BOUNDS,
+    maxBoundsViscosity:1
+  });
+
+  let tileFailureCount=0;
+  let tileReady=false;
+  
+  const tiles=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    subdomains: ['a', 'b', 'c'],
+    maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    noWrap:true,
+    bounds:CHINA_BOUNDS,
+    keepBuffer: 4,
+    updateWhenIdle: true,
+    errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' // 透明像素兜底，避免加载失败出现碎图
+  }).addTo(S.map);
+
+  // 瓦片错误重试/兜底机制
+  tiles.on('loading',()=>document.getElementById('tile-loader').classList.add('active'));
+  tiles.on('tileload',()=>{
+    tileReady=true;
+    document.getElementById('tile-loader').classList.remove('active');
+  });
+  tiles.on('load',()=>document.getElementById('tile-loader').classList.remove('active'));
+
+  tiles.on('tileerror',(error)=>{
+    tileFailureCount+=1;
+    if(!tileReady&&tileFailureCount>=6){
+      document.getElementById('tile-loader').classList.remove('active');
+    }
+  });
+
+  S.map.fitBounds(CHINA_BOUNDS,{padding:[24,24]});
+  S.map.on('zoom move',syncMarkerState);
+  S.map.on('click', (e) => {
+    const latlng = e.latlng;
+    const placeName = prompt('发现新地点！请给它起个名字：');
+    if (!placeName) return;
+    const memory = prompt(`在 ${placeName} 写下你的记忆：`);
+    if (!memory) return;
+
+    const id = 'custom_' + Date.now();
+    
+    if (window.parent && window.parent.GameEngine) {
+      ensureParentCustomPlace(id, placeName, latlng);
+      window.parent.GameEngine.CheckInSystem.submitCheckIn(id, memory);
+      refreshParentUI();
+    } else {
+      let state = {};
+      try {
+        const raw = localStorage.getItem('shanhai_travel_save');
+        if (raw) state = JSON.parse(raw);
+      } catch(err) {}
+      if (!state.cities) state.cities = {};
+      
+      state.cities[id] = { 
+        unlocked: true, 
+        memory: memory,
+        name: placeName,
+        lat: latlng.lat,
+        lng: latlng.lng,
+        isCustom: true
+      };
+      
+      localStorage.setItem('shanhai_travel_save', JSON.stringify(state));
+      applyProvinceColors();
+    }
+
+    renderChipBar();
+    createCustomMarker(id, latlng.lat, latlng.lng, placeName);
+    const customCity=getCityById(id)||buildCustomCity(id,{name:placeName,lat:latlng.lat,lng:latlng.lng,memory:memory});
+    focusCity(customCity,true);
+    refreshUnlockedVisuals();
+  });
+  window.addEventListener('resize',()=>{
+    ensureCanvasSize();
+    S.map.invalidateSize();
+  },{passive:true});
+}
+
+async function initMap(){
+  syncCitiesWithGameData(); // 确保首先同步数据
+  setLoading(true,'正在加载中国底图、边界与重点城市…');
+  updateHeaderStats();
+  renderChipBar();
+  renderDesktop(null);
+  updateBreadcrumb(null);
+
+  try{
+    if(window.parent && window.parent.document){
+      window.parent.document.addEventListener('gameStateUpdated',refreshUnlockedVisuals);
+    }
+    initBaseMap();
+    const {nation,provinces}=await loadBoundaryData();
+
+    S.provinceLayer=L.geoJSON(provinces,{
+      interactive:false,
+      style:function(feature){
+        const props=feature&&feature.properties;
+        const name=shortName(props&&(props.name||props.NAME||props.NL_NAME_1||props.省||''));
+        const unlocked=getUnlockedProvinces();
+        const isUnlocked=unlocked.has(name) || unlocked.has(props&&(props.name||props.NAME||props.NL_NAME_1||props.省||''));
+        return {
+          color: isUnlocked?'rgba(200,80,80,0.55)':'rgba(28,31,36,.76)',
+          weight: isUnlocked?1.4:1.15,
+          fillColor: isUnlocked?'#FFCCCB':'#966919',
+          fillOpacity: isUnlocked?0.72:0.8
+        };
+      }
+    }).addTo(S.map);
+
+    S.map.createPane('tintPane');
+    S.map.getPane('tintPane').style.zIndex='350';
+    S.tintLayer=L.rectangle(CHINA_BOUNDS,{
+      pane:'tintPane',
+      stroke:false,
+      fillColor:'#966919',
+      fillOpacity:.2,
+      interactive:false
+    }).addTo(S.map);
+
+    S.nationLayer=L.geoJSON(nation,{
+      interactive:false,
+      style:{
+        color:'rgba(24,26,30,.84)',
+        weight:1.45,
+        fillOpacity:0
+      }
+    }).addTo(S.map);
+
+    const maskFeature=getMaskGeometry(nation);
+    if(maskFeature){
+      S.maskLayer=L.geoJSON(maskFeature,{
+        interactive:false,
+        style:{
+          stroke:false,
+          fillColor:'#F4E3B2',
+          fillOpacity:1
+        }
+      }).addTo(S.map);
+    }
+
+    createCityLayers();
+    syncMarkerState();
+    setLoading(false);
+  }catch(err){
+    console.error('[Map] init error',err);
+    setLoadingError('地图资源加载失败。<br>请确认网络正常，并通过本地服务器访问页面。');
+  }
+}
+
+window.flyToCity=flyToCity;
+window.zoomBy=zoomBy;
+window.goBack=goBack;
+window.drillUp=resetMapView;
+window.resetMapView=resetMapView;
+window.closeSheet=closeSheet;
+window.addEventListener('load',initMap);
+</script>
+</body>
+</html>

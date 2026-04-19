@@ -1,0 +1,23 @@
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+.vscode/
+.idea/
+
+node_modules/
+dist/
+build/
+coverage/
+
+# Python Virtual Environment & Caches
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Logs & Temp Files
+*.log
+log.txt
+temp_*.js
+
